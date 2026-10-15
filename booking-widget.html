@@ -1,0 +1,197 @@
+<!-- ===== Виджет записи на встречу ===== -->
+<meta charset="UTF-8">
+<div id="bk-widget" class="bk">
+  <div class="bk-head">
+    <button type="button" class="bk-nav" id="bk-prev" aria-label="Предыдущий месяц">‹</button>
+    <div class="bk-month" id="bk-month" aria-live="polite"></div>
+    <button type="button" class="bk-nav" id="bk-next" aria-label="Следующий месяц">›</button>
+  </div>
+  <div class="bk-grid bk-dow" aria-hidden="true">
+    <span>Пн</span><span>Вт</span><span>Ср</span><span>Чт</span><span>Пт</span><span>Сб</span><span>Вс</span>
+  </div>
+  <div class="bk-grid" id="bk-days"></div>
+
+  <div class="bk-step" id="bk-times-wrap" hidden>
+    <p class="bk-label" id="bk-times-title"></p>
+    <div class="bk-times" id="bk-times"></div>
+  </div>
+
+  <form class="bk-step" id="bk-form" hidden novalidate>
+    <p class="bk-label" id="bk-summary"></p>
+    <input class="bk-input" id="bk-name" type="text" placeholder="Ваше имя" autocomplete="name" required>
+    <input class="bk-input" id="bk-contact" type="text" placeholder="Телефон или e-mail" autocomplete="email" required>
+    <p class="bk-error" id="bk-error" role="alert" hidden></p>
+    <button class="bk-submit" type="submit" id="bk-submit">Записаться</button>
+  </form>
+
+  <div class="bk-step bk-done" id="bk-done" hidden role="status"></div>
+</div>
+
+<style>
+  .bk{
+    --bk-accent:#2f6fed;      /* основной цвет — поменяйте под свой сайт */
+    --bk-bg:#fff; --bk-text:#1c2330; --bk-muted:#7a8394; --bk-line:#e3e7ee;
+    --bk-radius:12px;
+    box-sizing:border-box; width:100%; max-width:340px; padding:16px;
+    background:var(--bk-bg); color:var(--bk-text);
+    border:1px solid var(--bk-line); border-radius:var(--bk-radius);
+    font:15px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  }
+  .bk *{box-sizing:border-box}
+  .bk [hidden]{display:none!important}
+  .bk-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+  .bk-month{font-weight:600;text-transform:capitalize}
+  .bk-nav{width:32px;height:32px;border:1px solid var(--bk-line);background:none;border-radius:8px;
+    font-size:18px;line-height:1;cursor:pointer;color:var(--bk-text)}
+  .bk-nav:disabled{opacity:.35;cursor:default}
+  .bk-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;text-align:center}
+  .bk-dow{color:var(--bk-muted);font-size:12px;margin-bottom:4px}
+  .bk-day{aspect-ratio:1;border:0;border-radius:8px;background:none;color:var(--bk-text);font:inherit;cursor:pointer}
+  .bk-day:hover:not(:disabled){background:var(--bk-line)}
+  .bk-day:disabled{color:var(--bk-muted);opacity:.4;cursor:default}
+  .bk-day.today{box-shadow:inset 0 0 0 1px var(--bk-accent)}
+  .bk-day.sel{background:var(--bk-accent);color:#fff}
+  .bk-step{margin-top:14px;padding-top:14px;border-top:1px solid var(--bk-line)}
+  .bk-label{margin:0 0 8px;font-weight:600}
+  .bk-times{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+  .bk-time{padding:8px 0;border:1px solid var(--bk-line);border-radius:8px;background:none;color:var(--bk-text);
+    font:inherit;cursor:pointer}
+  .bk-time:hover:not(:disabled){border-color:var(--bk-accent)}
+  .bk-time:disabled{opacity:.35;text-decoration:line-through;cursor:default}
+  .bk-time.sel{background:var(--bk-accent);border-color:var(--bk-accent);color:#fff}
+  .bk-input{display:block;width:100%;margin-bottom:8px;padding:10px 12px;border:1px solid var(--bk-line);
+    border-radius:8px;background:var(--bk-bg);color:var(--bk-text);font:inherit}
+  .bk-input:focus{outline:2px solid var(--bk-accent);outline-offset:0;border-color:transparent}
+  .bk-submit{width:100%;padding:11px;border:0;border-radius:8px;background:var(--bk-accent);color:#fff;
+    font:inherit;font-weight:600;cursor:pointer}
+  .bk-submit:disabled{opacity:.6;cursor:default}
+  .bk-error{margin:0 0 8px;color:#c0392b;font-size:14px}
+  .bk-done{text-align:center}
+  .bk button:focus-visible{outline:2px solid var(--bk-accent);outline-offset:2px}
+</style>
+
+<script>
+(function () {
+  /* ---------- НАСТРОЙКИ ---------- */
+  var CONFIG = {
+    workDays: [1, 2, 3, 4, 5],                 // 1 = Пн … 7 = Вс
+    slots: ['10:00','11:00','12:00','14:00','15:00','16:00','17:00'],
+    monthsAhead: 3,                            // на сколько месяцев вперёд можно записаться
+    // Куда отправлять заявки (POST, JSON). Пример: Formspree, свой сервер, Make/Zapier webhook.
+    endpoint: 'https://booking-telegram.yjr98wwgw8.workers.dev/',
+    // Если endpoint пустой — заявка откроется в почтовой программе на этот адрес:
+    fallbackEmail: 'you@example.com',
+    // Занятые слоты: { '2026-10-20': ['10:00','11:00'] }. Обычно приходит с сервера.
+    busy: {}
+  };
+  /* ------------------------------- */
+
+  var $ = function (id) { return document.getElementById(id); };
+  var pad = function (n) { return String(n).padStart(2, '0'); };
+  var iso = function (d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); };
+  var today = new Date(); today.setHours(0, 0, 0, 0);
+  var view = new Date(today.getFullYear(), today.getMonth(), 1);
+  var maxMonth = new Date(today.getFullYear(), today.getMonth() + CONFIG.monthsAhead, 1);
+  var pickedDate = null, pickedTime = null;
+
+  var fmtMonth = new Intl.DateTimeFormat('ru-RU', { month: 'long', year: 'numeric' });
+  var fmtLong = new Intl.DateTimeFormat('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' });
+
+  function isWorkday(d) { return CONFIG.workDays.indexOf(d.getDay() === 0 ? 7 : d.getDay()) > -1; }
+
+  function renderCalendar() {
+    $('bk-month').textContent = fmtMonth.format(view);
+    $('bk-prev').disabled = view <= new Date(today.getFullYear(), today.getMonth(), 1);
+    $('bk-next').disabled = view >= maxMonth;
+    var box = $('bk-days'); box.innerHTML = '';
+    var offset = (view.getDay() + 6) % 7;
+    for (var i = 0; i < offset; i++) box.appendChild(document.createElement('span'));
+    var count = new Date(view.getFullYear(), view.getMonth() + 1, 0).getDate();
+    for (var n = 1; n <= count; n++) {
+      var d = new Date(view.getFullYear(), view.getMonth(), n);
+      var b = document.createElement('button');
+      b.type = 'button'; b.className = 'bk-day'; b.textContent = n;
+      if (+d === +today) b.classList.add('today');
+      if (d < today || !isWorkday(d)) b.disabled = true;
+      if (pickedDate && iso(d) === pickedDate) b.classList.add('sel');
+      b.setAttribute('data-date', iso(d));
+      box.appendChild(b);
+    }
+  }
+
+  function renderTimes() {
+    var busy = CONFIG.busy[pickedDate] || [];
+    var now = new Date();
+    var box = $('bk-times'); box.innerHTML = '';
+    $('bk-times-title').textContent = fmtLong.format(new Date(pickedDate + 'T00:00'));
+    CONFIG.slots.forEach(function (t) {
+      var b = document.createElement('button');
+      b.type = 'button'; b.className = 'bk-time'; b.textContent = t; b.setAttribute('data-time', t);
+      var past = new Date(pickedDate + 'T' + t) <= now;
+      if (busy.indexOf(t) > -1 || past) b.disabled = true;
+      if (t === pickedTime) b.classList.add('sel');
+      box.appendChild(b);
+    });
+    $('bk-times-wrap').hidden = false;
+  }
+
+  $('bk-prev').onclick = function () { view = new Date(view.getFullYear(), view.getMonth() - 1, 1); renderCalendar(); };
+  $('bk-next').onclick = function () { view = new Date(view.getFullYear(), view.getMonth() + 1, 1); renderCalendar(); };
+
+  $('bk-days').addEventListener('click', function (e) {
+    var b = e.target.closest('.bk-day'); if (!b || b.disabled) return;
+    pickedDate = b.getAttribute('data-date'); pickedTime = null;
+    $('bk-form').hidden = true;
+    renderCalendar(); renderTimes();
+  });
+
+  $('bk-times').addEventListener('click', function (e) {
+    var b = e.target.closest('.bk-time'); if (!b || b.disabled) return;
+    pickedTime = b.getAttribute('data-time');
+    renderTimes();
+    $('bk-summary').textContent = fmtLong.format(new Date(pickedDate + 'T00:00')) + ', ' + pickedTime;
+    $('bk-form').hidden = false;
+    $('bk-name').focus();
+  });
+
+  function showError(msg) { var el = $('bk-error'); el.textContent = msg; el.hidden = !msg; }
+
+  function finish() {
+    var box = $('bk-done');
+    box.innerHTML = '<p class="bk-label">Вы записаны</p><p>' + $('bk-summary').textContent + '</p>';
+    ['bk-days', 'bk-times-wrap', 'bk-form'].forEach(function (id) { $(id).hidden = true; });
+    box.hidden = false;
+  }
+
+  $('bk-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var name = $('bk-name').value.trim(), contact = $('bk-contact').value.trim();
+    if (!name || !contact) { showError('Укажите имя и телефон или e-mail.'); return; }
+    showError('');
+    var payload = { date: pickedDate, time: pickedTime, name: name, contact: contact };
+
+    if (!CONFIG.endpoint) {
+      var body = 'Дата: ' + pickedDate + '\nВремя: ' + pickedTime + '\nИмя: ' + name + '\nКонтакт: ' + contact;
+      window.location.href = 'mailto:' + CONFIG.fallbackEmail +
+        '?subject=' + encodeURIComponent('Запись на встречу') + '&body=' + encodeURIComponent(body);
+      finish(); return;
+    }
+
+    var btn = $('bk-submit'); btn.disabled = true; btn.textContent = 'Отправляем…';
+    fetch(CONFIG.endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify(payload)
+    }).then(function (r) {
+      if (!r.ok) throw new Error();
+      (CONFIG.busy[pickedDate] = CONFIG.busy[pickedDate] || []).push(pickedTime);
+      finish();
+    }).catch(function () {
+      showError('Не удалось отправить заявку. Попробуйте ещё раз.');
+      btn.disabled = false; btn.textContent = 'Записаться';
+    });
+  });
+
+  renderCalendar();
+})();
+</script>
